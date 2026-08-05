@@ -11,6 +11,21 @@ export const formatDuration = (milliseconds) => {
 export const formatTime = (timestamp) => new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 export const formatDateTime = (timestamp) => new Date(timestamp).toLocaleString([], { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
+export const incidentLocationKey = (incident) => `${incident.line}::${incident.belt}`;
+
+export const getNpdLocations = (incidents) => [...new Map(
+  incidents
+    .filter((incident) => incident.type === 'NPD')
+    .map((incident) => [incidentLocationKey(incident), { line: incident.line, belt: incident.belt }]),
+).values()];
+
+export const hasNpdAtLocation = (incidents, line, belt) => incidents.some(
+  (incident) => incident.type === 'NPD' && incident.line === line && incident.belt === belt,
+);
+
+export const isIncidentNpdLocked = (incident, incidents) => incident.type !== 'NPD'
+  && hasNpdAtLocation(incidents, incident.line, incident.belt);
+
 export const incidentMetrics = (incident, clock = Date.now()) => {
   const incidentMs = clock - incident.createdAt;
   const departmentMs = clock - incident.departmentStartedAt;
