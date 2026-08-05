@@ -1,6 +1,6 @@
-# Breakdown Notification – Phase 1 Prototype
+# Yazaki Notification – Phase 1 Prototype
 
-Frontend-only working prototype for the shop-floor breakdown workflow discussed so far.
+Frontend-only working prototype for the Yazaki shop-floor breakdown notification workflow.
 
 ## Included
 
