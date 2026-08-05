@@ -1,0 +1,18 @@
+{
+  "name": "breakdown-notification-prototype",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Frontend-only breakdown notification prototype",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "react": "latest",
+    "react-dom": "latest",
+    "vite": "^6.0.0"
+  }
+}

@@ -23,38 +23,33 @@ Frontend-only working prototype for the Yazaki shop-floor breakdown notification
 - Message confirmation such as `Message sent to IT Department`
 - Report/Resolve forms warn before discarding entered information
 - Popups close using X or outside click when safe
+- Incident and department SLA timers
+- Simulated department escalation matrix
+- Department reassignment with a continuous ticket timeline
+- Plant Admin and department-specific HOD dashboards
+- Filterable incident table with an in-place details drawer
+- Read-only `/tv` display with automatic 10-second pagination
+- Dummy role switching for Operator, Plant Admin and department HODs
 
 ## Intentionally mocked / not built yet
 
 - No backend/database
 - No real SMS provider (message delivery is simulated)
-- No escalation implementation yet
+- Escalations are displayed as a frontend simulation only
 - No calling integration
-- No TV dashboard
-- No admin/export/reporting screen
+- No report generation or export
 - No Phase 2 historical-ticket login/edit/add-note flow
 
 ## Run from terminal
 
-### Simplest option
-
-Open `index.html` directly in a browser.
-
-### Recommended local server
-
-If Node.js is installed:
+Install the development dependency and start the app:
 
 ```bash
-npx http-server . -p 5173
+npm install
+npm run dev
 ```
 
-Or with Python:
-
-```bash
-python -m http.server 5173
-```
-
-Then open:
+Then open the URL printed in the terminal (normally):
 
 ```text
 http://localhost:5173
@@ -68,4 +63,4 @@ Prototype login accepts any non-empty username/password.
 - `styles.css` – UI styling
 - `app.js` – mock data + workflow logic
 
-This is deliberately dependency-free so the first prototype can be run immediately. It can be migrated to React/Vite once the Phase 1 flow is approved.
+The application remains a frontend-only, framework-free prototype. Vite is used only as the local development server and production build tool; there is no backend, API layer, or database.
