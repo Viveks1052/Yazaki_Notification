@@ -37,6 +37,74 @@ export const problemMaster = [
   { name: 'Sensor not detecting', keywords: ['sensor', 'detect', 'signal'], department: 'Maintenance', priority: 'High', suggestedResolution: ['Clean sensor face', 'Check alignment and cable', 'Replace sensor if required'], ackSla: 8, resolutionSla: 30 },
 ];
 
+const randomItem = (items) => items[Math.floor(Math.random() * items.length)];
+const randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+const locationOptions = Object.entries(lines).flatMap(([line, belts]) => belts.map((belt) => ({ line, belt })));
+const reportingRemarks = [
+  'Reported during regular production monitoring.',
+  'Line team requested department support.',
+  'Issue observed during shift handover.',
+  'Operator marked this as affecting output quality.',
+  'Repeated symptom seen at the station.',
+  '',
+];
+
+export function generateHistoricalData(count, daysBack) {
+  const safeCount = Math.max(0, Number(count) || 0);
+  const safeDaysBack = Math.max(1, Number(daysBack) || 1);
+  const generatedAt = Date.now();
+  const historyWindowMs = safeDaysBack * 24 * 60 * 60 * 1000;
+  const resolvedCount = Math.round(safeCount * 0.95);
+  const statuses = Array.from({ length: safeCount }, (_, index) => (
+    index < resolvedCount ? 'RESOLVED' : (index % 2 === 0 ? 'ACTIVE' : 'WAITING_ACK')
+  )).sort(() => Math.random() - 0.5);
+
+  return statuses.map((status, index) => {
+    const master = randomItem(problemMaster);
+    const { line, belt } = randomItem(locationOptions);
+    const createdAt = generatedAt - randomInt(10 * 60_000, historyWindowMs);
+    const type = master.priority === 'Critical' && Math.random() < 0.18 ? 'NPD' : 'NORMAL';
+    const resolutionDuration = randomInt(8, Math.max(12, master.resolutionSla + 90)) * 60_000;
+    const availableResolutionMs = Math.max(5 * 60_000, generatedAt - createdAt - 60_000);
+    const resolvedAt = status === 'RESOLVED'
+      ? createdAt + Math.min(resolutionDuration, availableResolutionMs)
+      : null;
+    const acknowledgedAt = status === 'WAITING_ACK'
+      ? null
+      : createdAt + randomInt(1, Math.max(2, master.ackSla - 1)) * 60_000;
+    const acknowledgedBy = acknowledgedAt ? randomItem(employeeMaster[master.department]) : null;
+    const timeline = [
+      { label: 'Created', detail: `${line} · ${belt}`, at: createdAt },
+      { label: 'Department notified', detail: `${master.department} Department`, at: createdAt },
+      ...(acknowledgedAt ? [{ label: 'Acknowledged', detail: acknowledgedBy, at: acknowledgedAt }] : []),
+      ...(resolvedAt ? [{ label: 'Resolved', detail: `${master.department} closure simulated`, at: resolvedAt }] : []),
+    ];
+
+    return {
+      id: `BD-${2000 + index}`,
+      problem: master.name,
+      department: master.department,
+      previousDepartment: null,
+      priority: master.priority,
+      status,
+      type,
+      line,
+      belt,
+      remarks: randomItem(reportingRemarks),
+      createdAt,
+      departmentStartedAt: createdAt,
+      acknowledgedAt,
+      acknowledgedBy,
+      resolvedAt,
+      ackSla: master.ackSla,
+      resolutionSla: master.resolutionSla,
+      suggestedResolution: master.suggestedResolution,
+      transferHistory: [],
+      timeline,
+    };
+  });
+}
+
 const now = Date.now();
 const seed = [
   ['IT','Printer not working','WAITING_ACK','Medium',3,'Tata Ace','Belt 03',false],
@@ -92,6 +160,7 @@ export const initialIncidents = seed.map(([department, problem, status, priority
     departmentStartedAt,
     acknowledgedAt,
     acknowledgedBy: assignee,
+    resolvedAt: null,
     ackSla: master.ackSla,
     resolutionSla: master.resolutionSla,
     suggestedResolution: master.suggestedResolution,
@@ -103,3 +172,5 @@ export const initialIncidents = seed.map(([department, problem, status, priority
     ],
   };
 });
+
+export const historicalIncidents = generateHistoricalData(180, 30);

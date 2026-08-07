@@ -25,7 +25,9 @@ export function Modal({ title, children, onClose, narrow = false }) {
 }
 
 export function StatusPill({ status }) {
-  return <span className={`status-pill ${status === 'WAITING_ACK' ? 'waiting' : 'acknowledged'}`}>{status === 'WAITING_ACK' ? 'WAITING FOR ACK' : 'ACTIVE'}</span>;
+  const label = status === 'WAITING_ACK' ? 'WAITING FOR ACK' : status;
+  const className = status === 'WAITING_ACK' ? 'waiting' : status.toLowerCase();
+  return <span className={`status-pill ${className}`}>{label}</span>;
 }
 
 export function SlaBlock({ incident, clock, compact = false }) {

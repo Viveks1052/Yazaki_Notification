@@ -1,11 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { allEmployees, departments, employeeMaster, problemMaster } from './data';
 import { Escalation, IncidentCard, IncidentDrawer, Modal, SlaBlock, StatusPill, SummaryCards, Timeline, Topbar } from './components';
-import { formatDuration, formatTime, getNpdLocations, getSummary, hasNpdAtLocation, incidentMetrics, isIncidentNpdLocked, sortForOperations } from './utils';
+import { downloadIncidentReportCsv, formatDuration, formatTime, getNpdLocations, getSummary, hasNpdAtLocation, incidentMetrics, isIncidentNpdLocked, reportTimeframes, sortForOperations } from './utils';
 
 function NpdBanner({ incidents }) {
   const locations = getNpdLocations(incidents);
-  return locations.length ? <div className="global-npd-banner"><div className="alert-icon">!</div><div><strong>NPD ACTIVE — PRODUCTION STOPPED</strong><span>Restrictions apply only to the affected conveyor belt{locations.length > 1 ? 's' : ''}.</span><div className="npd-location-list">{locations.map((location) => <span className="npd-location-pill" key={`${location.line}-${location.belt}`}>NPD ACTIVE · {location.line} · {location.belt}</span>)}</div></div></div> : null;
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const compact = locations.length > 2;
+  return locations.length ? <div className="global-npd-banner"><div className="alert-icon">!</div><div className="npd-banner-content"><strong>NPD ACTIVE — PRODUCTION STOPPED</strong><span>Restrictions apply only to the affected conveyor belt{locations.length > 1 ? 's' : ''}.</span>{compact ? <div className="npd-summary-row"><span className="npd-summary-text">Production stopped on {locations.length} Conveyor Belts</span><button className="npd-detail-button" type="button" aria-expanded={detailsOpen} onClick={() => setDetailsOpen((current) => !current)}>View Details</button>{detailsOpen && <div className="npd-details-popover">{locations.map((location) => <span className="npd-location-pill" key={`${location.line}-${location.belt}`}>NPD ACTIVE · {location.line} · {location.belt}</span>)}</div>}</div> : <div className="npd-location-list">{locations.map((location) => <span className="npd-location-pill" key={`${location.line}-${location.belt}`}>NPD ACTIVE · {location.line} · {location.belt}</span>)}</div>}</div></div> : null;
 }
 
 function ReportModal({ incidents, onClose, onSubmit }) {
@@ -62,6 +64,18 @@ export function ReassignModal({ incident, onClose, onSubmit }) {
   </form></Modal>;
 }
 
+function ExportReportModal({ incidents, department, onClose }) {
+  const [hoursBack, setHoursBack] = useState(reportTimeframes[2].hours);
+  const download = () => {
+    downloadIncidentReportCsv(incidents, { hoursBack, department });
+    onClose();
+  };
+  return <Modal title="Export Report" onClose={onClose} narrow><div className="export-copy"><p>{department ? `${department} HOD export is restricted to ${department} incidents.` : 'Plant Admin export includes all departments.'}</p></div><div className="stack-form">
+    <label><span>Timeframe</span><div className="select-wrap"><select value={hoursBack} onChange={(event) => setHoursBack(Number(event.target.value))}>{reportTimeframes.map((item) => <option value={item.hours} key={item.hours}>{item.label}</option>)}</select></div></label>
+    <div className="confirm-actions"><button className="ghost-button" type="button" onClick={onClose}>Cancel</button><button className="primary-button" type="button" onClick={download}>Download CSV</button></div>
+  </div></Modal>;
+}
+
 export function OperatorDashboard({ session, incidents, clock, actions, onLogout }) {
   const [modal, setModal] = useState(null);
   const [selected, setSelected] = useState(null);
@@ -89,7 +103,7 @@ function FilterBar({ filters, setFilters, hodDepartment }) {
 }
 
 function IncidentTable({ incidents, allIncidents, clock, onSelect }) {
-  return <div className="table-wrap"><table className="incident-table"><thead><tr><th>Ticket</th><th>Incident</th><th>Owner</th><th>Status</th><th>Priority</th><th>Incident SLA</th><th>Attending</th></tr></thead><tbody>{incidents.map((item) => { const metrics = incidentMetrics(item, clock); const locked = isIncidentNpdLocked(item, allIncidents); return <tr className={locked ? 'npd-secondary locked-table-row' : ''} key={item.id} onClick={locked ? undefined : () => onSelect(item)} aria-disabled={locked || undefined}><td><strong>{item.id}</strong>{item.type === 'NPD' && <span className="table-npd">NPD</span>}</td><td><strong>{item.problem}</strong><small>{item.line} · {item.belt}</small></td><td>{item.department}</td><td><StatusPill status={item.status}/>{locked && <span className="table-lock-label">🔒 Locked while NPD is active on this conveyor belt.</span>}</td><td><span className={`priority-pill priority-${item.priority.toLowerCase()}`}>{item.priority}</span></td><td className={metrics.overdue ? 'overdue-text' : ''}>{formatDuration(metrics.incidentMs)}</td><td>{item.acknowledgedBy || '—'}</td></tr>; })}</tbody></table>{incidents.length === 0 && <div className="empty-table">No incidents match the selected filters.</div>}</div>;
+  return <div className="table-wrap"><table className="incident-table"><thead><tr><th>Ticket</th><th>Incident</th><th>Owner</th><th>Status</th><th>Priority</th><th>Incident SLA</th><th>Attending</th></tr></thead><tbody>{incidents.map((item) => { const metrics = incidentMetrics(item, clock); const locked = isIncidentNpdLocked(item, allIncidents); const incidentOverdue = metrics.resolutionOverdue; const criticalOverdue = incidentOverdue && metrics.incidentMs - item.resolutionSla * 60_000 > 24 * 60 * 60 * 1000; return <tr className={locked ? 'npd-secondary locked-table-row' : ''} key={item.id} onClick={locked ? undefined : () => onSelect(item)} aria-disabled={locked || undefined}><td><strong>{item.id}</strong>{item.type === 'NPD' && <span className="table-npd">NPD</span>}</td><td><strong>{item.problem}</strong><small>{item.line} · {item.belt}</small></td><td>{item.department}</td><td><StatusPill status={item.status}/>{locked && <span className="table-lock-label">🔒 Locked while NPD is active on this conveyor belt.</span>}</td><td><span className={`priority-pill priority-${item.priority.toLowerCase()}`}>{item.priority}</span></td><td><span className={`sla-cell ${incidentOverdue ? 'sla-overdue' : ''} ${criticalOverdue ? 'sla-critical-overdue' : ''}`}>{incidentOverdue && <span className="sla-warning-icon" aria-label="Overdue">⚠️</span>}<span>{formatDuration(metrics.incidentMs)}</span></span></td><td>{item.acknowledgedBy || '—'}</td></tr>; })}</tbody></table>{incidents.length === 0 && <div className="empty-table">No incidents match the selected filters.</div>}</div>;
 }
 
 function DepartmentStatus({ incidents, clock, department }) {
@@ -97,24 +111,32 @@ function DepartmentStatus({ incidents, clock, department }) {
   return <div className="department-list">{groups.map((name) => { const items = incidents.filter((item) => item.department === name); return <div className="department-row" key={name}><div><strong>{name}</strong><small>{items.filter((item) => item.status === 'ACTIVE').length} active · {items.filter((item) => incidentMetrics(item, clock).overdue).length} overdue</small></div><span>{items.length}</span></div>; })}</div>;
 }
 
-export function ManagementDashboard({ session, incidents, clock, actions, onLogout }) {
+function CriticalEmptyState() {
+  return <div className="critical-empty-state"><div className="critical-empty-icon">✓</div><strong>No critical incidents at this time.</strong></div>;
+}
+
+export function ManagementDashboard({ session, incidents, exportIncidents = incidents, clock, actions, onLogout }) {
   const hodDepartment = session.role.endsWith(' HOD') ? session.role.replace(' HOD', '') : null;
   const scoped = hodDepartment ? incidents.filter((item) => item.department === hodDepartment) : incidents;
   const [selected, setSelected] = useState(null);
   const [reassigning, setReassigning] = useState(null);
+  const [exporting, setExporting] = useState(false);
   const [filters, setFilters] = useState({ department: '', status: '', employee: '', line: '', flag: '' });
   const filtered = scoped.filter((item) => (!filters.department || item.department === filters.department) && (!filters.status || item.status === filters.status) && (!filters.employee || item.acknowledgedBy === filters.employee) && (!filters.line || item.line === filters.line) && (!filters.flag || (filters.flag === 'npd' ? item.type === 'NPD' : incidentMetrics(item, clock).overdue)));
   const summary = getSummary(scoped, clock);
   const recent = [...scoped].flatMap((item) => item.timeline.map((event) => ({ ...event, id: item.id }))).sort((a,b) => b.at-a.at).slice(0,6);
   const escalations = scoped.filter((item) => incidentMetrics(item, clock).escalationLevel > 0).length;
+  const activeTeamCount = scoped.filter((item) => item.status === 'ACTIVE').length;
+  const overdueTeamCount = scoped.filter((item) => incidentMetrics(item, clock).overdue).length;
+  const criticalIncidents = sortForOperations(scoped, clock).filter((item) => item.priority === 'Critical' || item.type === 'NPD').slice(0,5);
   return <main className="app-shell"><Topbar title={hodDepartment ? `${hodDepartment} HOD` : 'Plant Admin'} subtitle={hodDepartment ? 'Department Operations' : 'Plant Operations'} session={session} onLogout={onLogout} actions={<button className="icon-label-button" onClick={() => location.assign('/tv')}>TV Display</button>}/><section className="admin-wrap"><NpdBanner incidents={incidents}/><SummaryCards summary={summary} department={hodDepartment}/>
-    {hodDepartment && <div className="hod-strip"><div><span>Team workload</span><strong>{scoped.filter((item) => item.acknowledgedBy).length}</strong></div><div><span>Escalations</span><strong>{escalations}</strong></div><div><span>Transferred in</span><strong>{scoped.filter((item) => item.transferHistory.some((event) => event.to === hodDepartment)).length}</strong></div><div><span>Transferred out</span><strong>{incidents.filter((item) => item.transferHistory.some((event) => event.from === hodDepartment)).length}</strong></div></div>}
-    <div className="dashboard-grid"><section className="panel critical-panel"><div className="panel-heading"><div><p className="eyebrow">PRIORITY</p><h2>Critical Incidents</h2></div></div>{sortForOperations(scoped, clock).filter((item) => item.priority === 'Critical' || item.type === 'NPD').slice(0,5).map((item) => { const locked = isIncidentNpdLocked(item, incidents); return <button className={`critical-row ${locked ? 'npd-secondary' : ''}`} disabled={locked} key={item.id} onClick={() => setSelected(item)}><div><strong>{item.id} · {item.problem}</strong><small>{locked ? `🔒 NPD Active on ${item.belt}` : `${item.department} · ${item.line}`}</small></div><span>{formatDuration(incidentMetrics(item, clock).incidentMs)}</span></button>; })}</section>
-    <section className="panel"><div className="panel-heading"><div><p className="eyebrow">OWNERSHIP</p><h2>{hodDepartment ? 'Team Workload' : 'Department Status'}</h2></div></div><DepartmentStatus incidents={scoped} clock={clock} department={hodDepartment}/></section>
+    {hodDepartment && <div className="hod-strip"><div><span>Team workload</span><strong>{activeTeamCount} active · {overdueTeamCount} overdue</strong></div><div><span>Escalations</span><strong>{escalations}</strong></div><div><span>Transferred in</span><strong>{scoped.filter((item) => item.transferHistory.some((event) => event.to === hodDepartment)).length}</strong></div><div><span>Transferred out</span><strong>{incidents.filter((item) => item.transferHistory.some((event) => event.from === hodDepartment)).length}</strong></div></div>}
+    <div className={`dashboard-grid ${hodDepartment ? 'hod-dashboard-grid' : ''}`}><section className="panel critical-panel"><div className="panel-heading"><div><p className="eyebrow">PRIORITY</p><h2>Critical Incidents</h2></div></div>{criticalIncidents.length ? criticalIncidents.map((item) => { const locked = isIncidentNpdLocked(item, incidents); return <button className={`critical-row ${locked ? 'npd-secondary' : ''}`} disabled={locked} key={item.id} onClick={() => setSelected(item)}><div><strong>{item.id} · {item.problem}</strong><small>{locked ? `🔒 NPD Active on ${item.belt}` : `${item.department} · ${item.line}`}</small></div><span>{formatDuration(incidentMetrics(item, clock).incidentMs)}</span></button>; }) : <CriticalEmptyState/>}</section>
+    {!hodDepartment && <section className="panel"><div className="panel-heading"><div><p className="eyebrow">OWNERSHIP</p><h2>Department Status</h2></div></div><DepartmentStatus incidents={scoped} clock={clock} department={hodDepartment}/></section>}
     <section className="panel activity-panel"><div className="panel-heading"><div><p className="eyebrow">LIVE</p><h2>Recent Activity</h2></div></div>{recent.map((event, index) => <div className="activity-row" key={`${event.id}-${index}`}><span>{formatTime(event.at)}</span><div><strong>{event.id} · {event.label}</strong><small>{event.detail}</small></div></div>)}</section>
     {!hodDepartment && <section className="panel tv-preview"><div className="panel-heading"><div><p className="eyebrow">DISPLAY</p><h2>TV Preview</h2></div><button className="text-button" onClick={() => location.assign('/tv')}>Open fullscreen</button></div><div className="mini-tv"><strong>{summary.open}</strong><span>Open incidents</span><div><b>{summary.waiting} waiting</b><b>{summary.overdue} overdue</b><b>{summary.npd} NPD</b></div></div></section>}</div>
-    <section className="panel incident-section"><div className="panel-heading"><div><p className="eyebrow">OPERATIONS</p><h2>Incident Table</h2></div><span className="issue-count">{filtered.length} incidents</span></div><FilterBar filters={filters} setFilters={setFilters} hodDepartment={hodDepartment}/><IncidentTable incidents={sortForOperations(filtered, clock)} allIncidents={incidents} clock={clock} onSelect={setSelected}/></section>
-  </section>{selected && <IncidentDrawer incident={incidents.find((item) => item.id === selected.id)} clock={clock} onClose={() => setSelected(null)} onReassign={(item) => { setSelected(null); setReassigning(item); }}/>} {reassigning && <ReassignModal incident={reassigning} onClose={() => setReassigning(null)} onSubmit={(...values) => { actions.reassign(reassigning.id, ...values); setReassigning(null); }}/>}</main>;
+    <section className="panel incident-section"><div className="panel-heading"><div><p className="eyebrow">OPERATIONS</p><h2>Incident Table</h2></div><div className="incident-heading-actions"><span className="issue-count">{filtered.length} incidents</span><button className="primary-button export-button" type="button" onClick={() => setExporting(true)}>Export Report</button></div></div><FilterBar filters={filters} setFilters={setFilters} hodDepartment={hodDepartment}/><IncidentTable incidents={sortForOperations(filtered, clock)} allIncidents={incidents} clock={clock} onSelect={setSelected}/></section>
+  </section>{selected && <IncidentDrawer incident={incidents.find((item) => item.id === selected.id)} clock={clock} onClose={() => setSelected(null)} onReassign={(item) => { setSelected(null); setReassigning(item); }}/>} {reassigning && <ReassignModal incident={reassigning} onClose={() => setReassigning(null)} onSubmit={(...values) => { actions.reassign(reassigning.id, ...values); setReassigning(null); }}/>} {exporting && <ExportReportModal incidents={exportIncidents} department={hodDepartment} onClose={() => setExporting(false)}/>}</main>;
 }
 
 export function TvDisplay({ incidents, clock }) {
